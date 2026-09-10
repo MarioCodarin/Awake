@@ -8,7 +8,8 @@ struct AwakeApp: App {
         service: AssertionSleepControlService(),
         store: UserDefaultsPreferencesStore(),
         clock: RealSleepClock(),
-        loginItem: SMAppServiceLoginItemService()
+        loginItem: SMAppServiceLoginItemService(),
+        systemLock: PmsetSystemSleepLockService()
     )
 
     var body: some Scene {

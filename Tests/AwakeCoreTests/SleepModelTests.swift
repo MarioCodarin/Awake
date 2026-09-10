@@ -21,7 +21,35 @@ struct SleepModelTests {
         await tests.testLoginItemFailureDoesNotClaimEnabled()
         await tests.testPreferencesRoundTripThroughUserDefaults()
         try await tests.testRealIOKitAssertionCreateAndRelease()
-        print("PASS: all 15 state-management scenarios")
+        tests.testParsesPmsetSleepDisabled()
+        await tests.testLoadSurfacesLeftoverPmsetLock()
+        await tests.testUnlockClearsLeftoverPmsetLock()
+        print("PASS: all 18 state-management scenarios")
+    }
+
+    func testParsesPmsetSleepDisabled() {
+        expectTrue(SystemSleepLock.isDisabled(in: "System-wide power settings:\n SleepDisabled         1\n"))
+        expectFalse(SystemSleepLock.isDisabled(in: "System-wide power settings:\n SleepDisabled         0\n"))
+        expectTrue(SystemSleepLock.isDisabled(in: "SleepDisabled1"))
+        expectFalse(SystemSleepLock.isDisabled(in: "sleep 1 (sleep prevented by powerd)\n"))
+    }
+
+    func testLoadSurfacesLeftoverPmsetLock() async {
+        let lock = InMemorySystemSleepLockService(disabled: true)
+        let model = SleepModel(service: DemoSleepControlService(), systemLock: lock)
+        await model.load()
+        expectFalse(model.keepAwake)
+        expectTrue(model.systemSleepLocked)
+    }
+
+    func testUnlockClearsLeftoverPmsetLock() async {
+        let lock = InMemorySystemSleepLockService(disabled: true)
+        let model = SleepModel(service: DemoSleepControlService(), systemLock: lock)
+        await model.load()
+        expectTrue(model.systemSleepLocked)
+        model.unlockSystemSleep()
+        expectFalse(model.systemSleepLocked)
+        expectNil(model.errorMessage)
     }
 
     func testDemoStartsOffAndRetainsStateAcrossLoads() async {

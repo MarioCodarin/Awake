@@ -9,24 +9,28 @@ public final class SleepModel: ObservableObject {
     @Published public private(set) var preventDisplaySleep = true
     @Published public private(set) var duration: AwakeDuration = .indefinite
     @Published public private(set) var launchAtLogin = false
+    @Published public private(set) var systemSleepLocked = false
 
     private var hasLoaded = false
     private let service: any SleepControlService
     private let store: any PreferencesStore
     private let clock: any SleepClock
     private let loginItem: any LoginItemService
+    private let systemLock: any SystemSleepLockService
     private var timerTask: Task<Void, Never>?
 
     public init(
         service: any SleepControlService,
         store: (any PreferencesStore)? = nil,
         clock: (any SleepClock)? = nil,
-        loginItem: (any LoginItemService)? = nil
+        loginItem: (any LoginItemService)? = nil,
+        systemLock: (any SystemSleepLockService)? = nil
     ) {
         self.service = service
         self.store = store ?? InMemoryPreferencesStore()
         self.clock = clock ?? RealSleepClock()
         self.loginItem = loginItem ?? InMemoryLoginItemService()
+        self.systemLock = systemLock ?? InMemorySystemSleepLockService()
     }
 
     public func load() async {
@@ -47,6 +51,7 @@ public final class SleepModel: ObservableObject {
             }
             hasLoaded = true
             errorMessage = nil
+            refreshSystemLock()
             persist()
             isBusy = false
             if shouldStartTimer {
@@ -67,6 +72,7 @@ public final class SleepModel: ObservableObject {
             try await service.set(keepAwake: value, preventDisplaySleep: preventDisplaySleep)
             keepAwake = value
             persist()
+            refreshSystemLock()
             isBusy = false
             if value {
                 startTimerIfNeeded()
@@ -106,6 +112,21 @@ public final class SleepModel: ObservableObject {
         startTimerIfNeeded()
     }
 
+    public func unlockSystemSleep() {
+        do {
+            try systemLock.clearSleepDisabled()
+            refreshSystemLock()
+            if systemSleepLocked {
+                errorMessage = "Couldn’t unlock Apple Sleep. Try again."
+            } else {
+                errorMessage = nil
+            }
+        } catch {
+            refreshSystemLock()
+            errorMessage = "Password required to unlock Apple Sleep."
+        }
+    }
+
     public func setLaunchAtLogin(_ value: Bool) {
         do {
             try loginItem.setEnabled(value)
@@ -119,6 +140,10 @@ public final class SleepModel: ObservableObject {
 
     public func waitForTimer() async {
         await timerTask?.value
+    }
+
+    private func refreshSystemLock() {
+        systemSleepLocked = systemLock.isSleepDisabled()
     }
 
     private func persist() {

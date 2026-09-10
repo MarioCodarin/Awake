@@ -33,13 +33,11 @@ Intel Macs: build from source instead.
 
 Drag `dist/Awake.app` into `/Applications` and open it. A moon appears in the menu bar.
 
-If you already ran `sudo pmset -a disablesleep 1`, undo that once so macOS is not stuck with sleep off:
+If  → Sleep is gray while Awake says **Sleep allowed**, a leftover `pmset disablesleep` flag is still on. In the popover tap **Unlock Apple Sleep…** (password once), or:
 
 ```sh
 sudo pmset -a disablesleep 0
 ```
-
-Then use Awake instead.
 
 ## Usage
 

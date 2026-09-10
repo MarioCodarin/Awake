@@ -14,6 +14,18 @@ struct AwakePopover: View {
             displayRow
             loginRow
             statusRow
+            if model.systemSleepLocked && !model.keepAwake {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(" Sleep is locked by an old pmset setting. Awake is off, but the Apple menu stays gray until this is cleared.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Unlock Apple Sleep…") {
+                        model.unlockSystemSleep()
+                    }
+                    .controlSize(.small)
+                }
+            }
             if let error = model.errorMessage {
                 Text(error)
                     .font(.caption)
@@ -27,6 +39,12 @@ struct AwakePopover: View {
         .background(.regularMaterial)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: model.keepAwake)
         .task { await model.load() }
+    }
+
+    private var statusLabel: String {
+        if model.keepAwake { return "Sleep disabled" }
+        if model.systemSleepLocked { return "Apple Sleep still locked" }
+        return "Sleep allowed"
     }
 
     private var appVersion: String {
@@ -145,7 +163,7 @@ struct AwakePopover: View {
             Circle()
                 .fill(model.keepAwake ? Color.green : Color.secondary.opacity(0.5))
                 .frame(width: 4, height: 4)
-            Text(model.keepAwake ? "Sleep disabled" : "Sleep allowed")
+            Text(statusLabel)
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
             Spacer()
