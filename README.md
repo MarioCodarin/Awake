@@ -19,7 +19,7 @@ Requires macOS 13 or later on Apple Silicon.
 
 Get the ready **macOS arm64** app from [Releases](https://github.com/MarioCodarin/Awake/releases/latest):
 
-1. Download `Awake-1.0.0-macos-arm64.zip`
+1. Download `Awake-1.0.1-macos-arm64.zip`
 2. Unzip and drag `Awake.app` into `/Applications`
 3. Open it. First launch: right-click the app → **Open** (ad-hoc signed, not notarized)
 

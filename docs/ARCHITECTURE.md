@@ -46,5 +46,5 @@ The view never talks to IOKit.
 ## Identity
 
 - Bundle ID: `com.mariocodarin.Awake`
-- Version: 1.0.0
+- Version: 1.0.1
 - Copyright: Mario Codarin
