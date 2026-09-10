@@ -29,6 +29,10 @@ struct AwakePopover: View {
         .task { await model.load() }
     }
 
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
+    }
+
     private var header: some View {
         HStack(spacing: 6) {
             Text("AWAKE")
@@ -62,14 +66,14 @@ struct AwakePopover: View {
                 )
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
-                Text("Keep awake")
+                Text("Disable sleep")
                     .font(.system(size: 14, weight: .semibold))
-                Text(model.keepAwake ? "Sleep prevented" : "Normal sleep")
+                Text(model.keepAwake ? "Sleep disabled" : "Sleep allowed")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 4)
-            Toggle("Keep awake", isOn: Binding(
+            Toggle("Disable sleep", isOn: Binding(
                 get: { model.keepAwake },
                 set: { value in Task { await model.setKeepAwake(value) } }
             ))
@@ -78,7 +82,7 @@ struct AwakePopover: View {
             .tint(.green)
             .controlSize(.small)
             .disabled(model.isBusy)
-            .accessibilityHint("Prevents this Mac from sleeping while Awake is on.")
+            .accessibilityHint("Prevents this Mac from sleeping while Awake is on. Sleep is allowed again when you turn this off or quit.")
         }
     }
 
@@ -141,7 +145,7 @@ struct AwakePopover: View {
             Circle()
                 .fill(model.keepAwake ? Color.green : Color.secondary.opacity(0.5))
                 .frame(width: 4, height: 4)
-            Text(model.keepAwake ? "Assertion active" : "Idle")
+            Text(model.keepAwake ? "Sleep disabled" : "Sleep allowed")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
             Spacer()
@@ -154,10 +158,10 @@ struct AwakePopover: View {
     private var about: some View {
         VStack(alignment: .leading, spacing: 3) {
             Divider()
-            Text("Mario Codarin · v1.0.0")
+            Text("Mario Codarin · v\(appVersion)")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
-            Text("Awake never leaves this Mac. No network, no accounts.")
+            Text("No sudo. Sleep is allowed again when you quit.")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
             Link("github.com/MarioCodarin/Awake", destination: URL(string: "https://github.com/MarioCodarin/Awake")!)

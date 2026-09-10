@@ -17,7 +17,7 @@ swift run AwakeChecks
 - `Resources` — `Info.plist` and app icon
 - `scripts/build-app.sh` — release `.app` bundle
 
-System integration belongs in `AwakeCore`, never in the view.
+System integration belongs in `AwakeCore`, never in the view. Do not add `pmset`, `sudo`, or a privileged helper. The Disable sleep toggle must take a `PreventSystemSleep` assertion (with idle-system fallback).
 
 ## Tests
 
@@ -28,8 +28,8 @@ Timer tests must use `ControllableSleepClock`. Do not sleep real minutes.
 If you change how assertions are created, confirm on a Mac:
 
 1. Build and open `dist/Awake.app`
-2. Toggle Keep awake on
-3. `pmset -g assertions` lists `Awake`
+2. Toggle Disable sleep on
+3. `pmset -g assertions` lists `PreventUserIdleSystemSleep named: "Awake"`
 4. Quit the app
 5. The assertion is gone
 

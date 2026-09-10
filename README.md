@@ -4,7 +4,14 @@
   <img src="docs/icon.png" width="128" height="128" alt="Awake app icon: a golden sun overlapping a silver moon on a night sky">
 </p>
 
-A tiny native macOS menu-bar app that keeps your Mac awake. One switch, quiet styling, no Dock icon, no admin prompt, no network.
+A native macOS menu-bar app by **Mario Codarin**. Daily stand-in for:
+
+```sh
+sudo pmset -a disablesleep 1   # disable sleep
+sudo pmset -a disablesleep 0   # allow sleep again
+```
+
+One toggle. No password. No Dock icon. No leftover setting if you quit.
 
 Requires macOS 13 or later.
 
@@ -14,39 +21,49 @@ Requires macOS 13 or later.
 ./scripts/build-app.sh
 ```
 
-Then drag `dist/Awake.app` into `/Applications` and open it. A moon appears in the menu bar.
+Drag `dist/Awake.app` into `/Applications` and open it. A moon appears in the menu bar.
+
+If you already ran `sudo pmset -a disablesleep 1`, undo that once so macOS is not stuck with sleep off:
+
+```sh
+sudo pmset -a disablesleep 0
+```
+
+Then use Awake instead.
 
 ## Usage
 
-Click the moon. Toggle **Keep awake**.
+Click the moon. Toggle **Disable sleep**.
 
-- **Duration** — Indefinite, 15 minutes, 30 minutes, 1 hour, or 2 hours. When a timer ends, Awake turns itself off.
-- **Keep display on** — On (default) also prevents the display from sleeping. Off lets the display sleep while the Mac stays awake.
-- **Launch at login** — Starts Awake when you log in. This is reliable after the app lives in `/Applications`.
-- Last mode is remembered across launches.
-- Quit with the power button in the popover, or Command-Q while the popover is open.
+- **On** — idle sleep is blocked without sudo. The next launch restores this if you left it on.
+- **Off** — sleep is allowed again. **Quit** also allows sleep until you reopen the app.
+- **Duration** — Indefinite, 15 minutes, 30 minutes, 1 hour, or 2 hours.
+- **Keep display on** — also stops the display from sleeping.
+- **Launch at login** — reliable after the app lives in `/Applications`.
 
-The menu-bar icon is a moon when idle and a sun while sleep is prevented.
+The menu-bar icon is a moon when sleep is allowed and a sun while sleep is disabled.
 
 ## How it works
 
-Awake uses Apple’s user-space power-management API (`IOPMAssertionCreateWithName`). It does **not** run `pmset`, request administrator access, or install a privileged helper.
+Awake does **not** run `pmset` or ask for a password. It holds IOKit assertions in-process:
 
-When you turn Awake on, macOS records an assertion named `Awake`. When you turn it off, quit the app, or the process dies, the assertion is released and the Mac can sleep again.
+- `PreventUserIdleSystemSleep` named `Awake` — blocks idle sleep, including on battery
+- `PreventSystemSleep` named `Awake` — extra, stronger on AC (`caffeinate -s`); macOS may ignore it on battery
+- `PreventUserIdleDisplaySleep` named `Awake Display` — when **Keep display on** is checked
 
-You can confirm this while Awake is on:
+Confirm while it is on:
 
 ```sh
 pmset -g assertions
 ```
 
-Look for `Awake` under `PreventUserIdleDisplaySleep` or `PreventUserIdleSystemSleep`.
+You should see `PreventUserIdleSystemSleep named: "Awake"`. Quit the app and those lines are gone.
+
+Lid close and  → Sleep can still sleep a portable. `pmset disablesleep` is a persistent root override; Awake is the no-sudo daily switch and does not survive quitting.
 
 ## Privacy
 
-Awake never leaves this Mac. No network, no accounts, no analytics, no data collection.
-
-Preferences are stored in the app’s `UserDefaults` on this machine.
+Awake never leaves this Mac. No network, no accounts, no analytics.
 
 ## Build and test
 
@@ -58,17 +75,9 @@ swift run AwakeChecks
 open dist/Awake.app
 ```
 
-The build script produces a locally ad-hoc-signed app for the current Mac’s architecture. Developer ID signing and notarization are not included.
-
 ## Architecture
 
-`AwakeApp` owns one `SleepModel` and presents `AwakePopover` through SwiftUI’s window-style `MenuBarExtra`.
-
-`SleepModel` owns confirmed state, pending operations, recoverable errors, duration timers, and preferences. It talks to an injected `SleepControlService`. Failed writes keep the last confirmed state; concurrent writes are ignored while busy.
-
-Production uses `AssertionSleepControlService` (IOKit). Tests use `DemoSleepControlService` and in-memory fakes.
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the assertion lifecycle and why this is not `pmset`.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## License
 

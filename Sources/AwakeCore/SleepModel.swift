@@ -80,15 +80,20 @@ public final class SleepModel: ObservableObject {
     }
 
     public func setPreventDisplaySleep(_ value: Bool) async {
+        let previous = preventDisplaySleep
         preventDisplaySleep = value
-        persist()
-        guard keepAwake, !isBusy else { return }
+        guard keepAwake, !isBusy else {
+            persist()
+            return
+        }
         isBusy = true
         errorMessage = nil
         do {
             try await service.set(keepAwake: true, preventDisplaySleep: value)
+            persist()
             isBusy = false
         } catch {
+            preventDisplaySleep = previous
             isBusy = false
             errorMessage = "Couldn’t update. Try again."
         }

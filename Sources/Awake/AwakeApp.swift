@@ -16,7 +16,7 @@ struct AwakeApp: App {
             AwakePopover(model: model)
         } label: {
             Image(systemName: model.keepAwake ? "sun.max.fill" : "moon")
-                .accessibilityLabel(model.keepAwake ? "Awake: sleep prevented" : "Awake: normal sleep")
+                .accessibilityLabel(model.keepAwake ? "Awake: sleep disabled" : "Awake: sleep allowed")
                 .task { await model.load() }
         }
         .menuBarExtraStyle(.window)

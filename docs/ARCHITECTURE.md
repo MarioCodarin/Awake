@@ -8,6 +8,22 @@ Awake is a Swift package with three targets:
 | `AwakeCore` | Model, preferences, IOKit assertions, login item |
 | `AwakeChecks` | Executable test suite |
 
+## Why not `sudo pmset -a disablesleep 1`
+
+That command writes a persistent system setting and needs administrator authorization. If you forget `disablesleep 0`, the Mac may not sleep until someone runs pmset again.
+
+Awake holds IOKit assertions in-process instead:
+
+| On | Assertion |
+|---|---|
+| Disable sleep | `PreventUserIdleSystemSleep` named `Awake` (always; works on battery) |
+| Disable sleep | plus `PreventSystemSleep` named `Awake` when create succeeds (stronger on AC; often ignored on battery) |
+| Keep display on | plus `PreventUserIdleDisplaySleep` named `Awake Display` |
+
+New assertions are created before old ones are released, so a failed update cannot drop the previous hold. Failed releases keep those IDs so a later off/quit can retry. Process exit also drops them. There is no leftover `disablesleep` flag.
+
+`PreventSystemSleep` is deprecated in the IOKit headers; `caffeinate -s` still uses it. Idle-system is Apple’s supported type and is what actually holds on battery.
+
 ## Data flow
 
 ```
@@ -18,40 +34,14 @@ AwakePopover  →  SleepModel  →  SleepControlService
                      └─ LoginItemService (SMAppService)
 ```
 
-The view never talks to IOKit. `SleepModel` is the only object that decides when to create or release an assertion.
-
-## SleepControlService
-
-```swift
-func read() async throws -> Bool
-func set(keepAwake: Bool, preventDisplaySleep: Bool) async throws
-```
-
-- Production: `AssertionSleepControlService` via `IOPMAssertionCreateWithName`
-- Tests: `DemoSleepControlService` and fakes
-
-`preventDisplaySleep == true` uses `PreventUserIdleDisplaySleep`. `false` uses `PreventUserIdleSystemSleep` (display may sleep, Mac stays awake).
-
-Turning keep-awake on while already on releases the previous assertion and creates a new one, so a display-mode change takes effect immediately.
-
-## Assertion lifecycle
-
-1. User turns Keep awake on → `SleepModel.setKeepAwake(true)` → `AssertionSleepControlService` creates an assertion named `Awake`.
-2. Timer expiry, user toggle off, or `setKeepAwake(false)` → `IOPMAssertionRelease`.
-3. Process exit or crash → macOS drops the assertion with the process. The Mac can sleep again. There is no leftover `disablesleep` flag.
-
-## Why not pmset
-
-`pmset -a disablesleep 1` needs administrator authorization and writes a persistent system setting. If the app dies, the Mac can remain unable to sleep until someone runs `pmset` again. A privileged helper would be required to do this without a sudo prompt.
-
-IOKit assertions are the API Amphetamine, Caffeine, and KeepingYouAwake use. They are per-process, need no admin, and clean up on exit.
+The view never talks to IOKit.
 
 ## State rules
 
 - Failed writes keep the last confirmed `keepAwake` value and set `errorMessage`.
 - Concurrent writes while `isBusy` are ignored.
-- `load()` runs once per model instance. If preferences say keep-awake was on, it re-applies the assertion.
-- Duration timers are a single `Task` on `SleepModel`. Changing duration while on cancels the previous task.
+- `load()` runs from the menu-bar label at launch so a restored “on” state takes the assertion before the popover is opened.
+- Duration timers are a single `Task` on `SleepModel`.
 
 ## Identity
 
