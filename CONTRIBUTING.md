@@ -7,6 +7,7 @@ macOS 13+ and Swift 5.9+ (Xcode Command Line Tools are enough).
 ```sh
 swift run AwakeChecks
 ./scripts/build-app.sh
+./scripts/package-release.sh
 ```
 
 ## Layout
