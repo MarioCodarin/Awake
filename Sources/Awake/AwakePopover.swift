@@ -161,9 +161,10 @@ struct AwakePopover: View {
             Text("Mario Codarin · v\(appVersion)")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
-            Text("No sudo. Sleep is allowed again when you quit.")
+            Text("Blocks idle sleep. Lid close and  → Sleep still work.")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Link("github.com/MarioCodarin/Awake", destination: URL(string: "https://github.com/MarioCodarin/Awake")!)
                 .font(.system(size: 10))
         }

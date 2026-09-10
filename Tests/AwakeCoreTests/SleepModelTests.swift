@@ -12,6 +12,8 @@ struct SleepModelTests {
         try await tests.testAssertionCreateAndRelease()
         try await tests.testFallsBackToIdleSystemSleepWhenPreventSystemSleepFails()
         try await tests.testDisplayCreateFailureReleasesPartialAssertions()
+        try await tests.testFailedRollbackKeepsHoldTracked()
+        try await tests.testStayingOnThrowsWhenOldReleaseFails()
         await tests.testFailedAssertionCreateLeavesKeepAwakeOff()
         await tests.testTimerExpiryTurnsKeepAwakeOff()
         await tests.testChangingDurationWhileOnCancelsPreviousTimer()
@@ -19,7 +21,7 @@ struct SleepModelTests {
         await tests.testLoginItemFailureDoesNotClaimEnabled()
         await tests.testPreferencesRoundTripThroughUserDefaults()
         try await tests.testRealIOKitAssertionCreateAndRelease()
-        print("PASS: all 13 state-management scenarios")
+        print("PASS: all 15 state-management scenarios")
     }
 
     func testDemoStartsOffAndRetainsStateAcrossLoads() async {
@@ -98,6 +100,39 @@ struct SleepModelTests {
         try await service.set(keepAwake: true, preventDisplaySleep: true)
         expectEqual(client.createdTypes, [AssertionType.preventIdleSystemSleep, AssertionType.preventDisplaySleep])
         expectTrue(try await service.read())
+    }
+
+    func testFailedRollbackKeepsHoldTracked() async throws {
+        let client = FakeAssertionClient()
+        client.failTypes = [AssertionType.preventDisplaySleep]
+        client.shouldFailRelease = true
+        let service = AssertionSleepControlService(client: client)
+        do {
+            try await service.set(keepAwake: true, preventDisplaySleep: true)
+            precondition(false, "Expected create/rollback to fail")
+        } catch {
+            expectTrue(try await service.read())
+        }
+        client.shouldFailRelease = false
+        try await service.set(keepAwake: false, preventDisplaySleep: true)
+        expectFalse(try await service.read())
+    }
+
+    func testStayingOnThrowsWhenOldReleaseFails() async throws {
+        let client = FakeAssertionClient()
+        let service = AssertionSleepControlService(client: client)
+        try await service.set(keepAwake: true, preventDisplaySleep: true)
+        expectTrue(try await service.read())
+        client.shouldFailRelease = true
+        do {
+            try await service.set(keepAwake: true, preventDisplaySleep: false)
+            precondition(false, "Expected old release to fail")
+        } catch {
+            expectTrue(try await service.read())
+        }
+        client.shouldFailRelease = false
+        try await service.set(keepAwake: false, preventDisplaySleep: false)
+        expectFalse(try await service.read())
     }
 
     func testDisplayCreateFailureReleasesPartialAssertions() async throws {
@@ -197,7 +232,6 @@ struct SleepModelTests {
         expectTrue(try await service.read())
         let listed = pmsetAssertions()
         expectTrue(listed.contains("PreventUserIdleSystemSleep named: \"Awake\""))
-        expectTrue(listed.contains("PreventSystemSleep named: \"Awake\""))
         expectTrue(listed.contains("PreventUserIdleDisplaySleep named: \"Awake Display\""))
         try await service.set(keepAwake: false, preventDisplaySleep: true)
         expectFalse(try await service.read())
@@ -256,6 +290,7 @@ private final class FakeAssertionClient: AssertionClient, @unchecked Sendable {
     var createdTypes: [String] = []
     var releaseCount = 0
     var shouldFailCreate = false
+    var shouldFailRelease = false
     var failTypes: Set<String> = []
     private var nextID: UInt32 = 1
     func create(type: String, name: String) throws -> UInt32 {
@@ -265,6 +300,7 @@ private final class FakeAssertionClient: AssertionClient, @unchecked Sendable {
         return nextID
     }
     func release(id: UInt32) throws {
+        if shouldFailRelease { throw SleepControlError.releaseFailed }
         releaseCount += 1
     }
 }

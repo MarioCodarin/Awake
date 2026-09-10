@@ -17,7 +17,7 @@ swift run AwakeChecks
 - `Resources` — `Info.plist` and app icon
 - `scripts/build-app.sh` — release `.app` bundle
 
-System integration belongs in `AwakeCore`, never in the view. Do not add `pmset`, `sudo`, or a privileged helper. The Disable sleep toggle must take a `PreventSystemSleep` assertion (with idle-system fallback).
+System integration belongs in `AwakeCore`, never in the view. Do not add `pmset`, `sudo`, or a privileged helper. Disable sleep always takes `PreventUserIdleSystemSleep`; `PreventSystemSleep` is a best-effort AC extra.
 
 ## Tests
 

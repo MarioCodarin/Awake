@@ -10,6 +10,7 @@ public enum AssertionType {
 
 public enum SleepControlError: Error, Equatable {
     case assertionFailed(Int32)
+    case releaseFailed
 }
 
 public protocol AssertionClient: AnyObject {
@@ -57,29 +58,19 @@ public final class AssertionSleepControlService: SleepControlService {
 
     public func set(keepAwake: Bool, preventDisplaySleep: Bool) async throws {
         let newIDs: [UInt32]
-        if keepAwake {
-            newIDs = try makeAssertions(preventDisplaySleep: preventDisplaySleep)
-        } else {
-            newIDs = []
+        do {
+            newIDs = keepAwake ? try makeAssertions(preventDisplaySleep: preventDisplaySleep) : []
+        } catch let partial as UnreleasedHold {
+            assertionIDs.append(contentsOf: partial.ids)
+            throw SleepControlError.releaseFailed
         }
         let oldIDs = assertionIDs
         assertionIDs = newIDs
-        var firstError: Error?
-        var leftover: [UInt32] = []
-        for id in oldIDs {
-            do {
-                try client.release(id: id)
-            } catch {
-                leftover.append(id)
-                if firstError == nil { firstError = error }
-            }
+        let leftover = releaseBestEffort(oldIDs)
+        assertionIDs.append(contentsOf: leftover)
+        if !leftover.isEmpty {
+            throw SleepControlError.releaseFailed
         }
-        if keepAwake {
-            assertionIDs.append(contentsOf: leftover)
-            return
-        }
-        assertionIDs = leftover
-        if let firstError { throw firstError }
     }
 
     deinit {
@@ -100,10 +91,25 @@ public final class AssertionSleepControlService: SleepControlService {
             }
             return created
         } catch {
-            for id in created {
-                try? client.release(id: id)
-            }
-            throw error
+            let leftover = releaseBestEffort(created)
+            if leftover.isEmpty { throw error }
+            throw UnreleasedHold(ids: leftover)
         }
     }
+
+    private func releaseBestEffort(_ ids: [UInt32]) -> [UInt32] {
+        var leftover: [UInt32] = []
+        for id in ids {
+            do {
+                try client.release(id: id)
+            } catch {
+                leftover.append(id)
+            }
+        }
+        return leftover
+    }
+}
+
+private struct UnreleasedHold: Error {
+    let ids: [UInt32]
 }
