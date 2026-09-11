@@ -24,7 +24,8 @@ struct SleepModelTests {
         tests.testParsesPmsetSleepDisabled()
         await tests.testLoadSurfacesLeftoverPmsetLock()
         await tests.testUnlockClearsLeftoverPmsetLock()
-        print("PASS: all 18 state-management scenarios")
+        await tests.testToggleWritesPmsetFlag()
+        print("PASS: all 19 state-management scenarios")
     }
 
     func testParsesPmsetSleepDisabled() {
@@ -38,7 +39,7 @@ struct SleepModelTests {
         let lock = InMemorySystemSleepLockService(disabled: true)
         let model = SleepModel(service: DemoSleepControlService(), systemLock: lock)
         await model.load()
-        expectFalse(model.keepAwake)
+        expectTrue(model.keepAwake)
         expectTrue(model.systemSleepLocked)
     }
 
@@ -46,21 +47,36 @@ struct SleepModelTests {
         let lock = InMemorySystemSleepLockService(disabled: true)
         let model = SleepModel(service: DemoSleepControlService(), systemLock: lock)
         await model.load()
-        expectTrue(model.systemSleepLocked)
-        model.unlockSystemSleep()
-        expectFalse(model.systemSleepLocked)
+        expectTrue(model.keepAwake)
+        await model.setKeepAwake(false)
+        expectFalse(model.keepAwake)
+        expectFalse(lock.disabled)
         expectNil(model.errorMessage)
+    }
+
+    func testToggleWritesPmsetFlag() async {
+        let lock = InMemorySystemSleepLockService()
+        let model = SleepModel(service: DemoSleepControlService(), systemLock: lock)
+        await model.load()
+        expectFalse(lock.disabled)
+        await model.setKeepAwake(true)
+        expectTrue(lock.disabled)
+        expectTrue(model.keepAwake)
+        await model.setKeepAwake(false)
+        expectFalse(lock.disabled)
+        expectFalse(model.keepAwake)
     }
 
     func testDemoStartsOffAndRetainsStateAcrossLoads() async {
         let service = DemoSleepControlService()
-        let model = SleepModel(service: service)
+        let lock = InMemorySystemSleepLockService()
+        let model = SleepModel(service: service, systemLock: lock)
         await model.load()
         expectFalse(model.keepAwake)
         await model.setKeepAwake(true)
         await model.load()
         expectTrue(model.keepAwake)
-        let reopened = SleepModel(service: service)
+        let reopened = SleepModel(service: service, systemLock: lock)
         await reopened.load()
         expectTrue(reopened.keepAwake)
         await reopened.setKeepAwake(false)
@@ -69,17 +85,20 @@ struct SleepModelTests {
     }
 
     func testFailedUpdatePreservesLastConfirmedStateAndCanRetry() async {
-        let service = FailingService()
-        let model = SleepModel(service: service)
+        let lock = InMemorySystemSleepLockService(disabled: true)
+        lock.shouldFailSet = true
+        let model = SleepModel(service: DemoSleepControlService(), systemLock: lock)
         await model.load()
         expectTrue(model.keepAwake)
         await model.setKeepAwake(false)
         expectTrue(model.keepAwake)
+        expectTrue(lock.disabled)
         expectNotNil(model.errorMessage)
         expectFalse(model.isBusy)
-        service.shouldFail = false
+        lock.shouldFailSet = false
         await model.setKeepAwake(false)
         expectFalse(model.keepAwake)
+        expectFalse(lock.disabled)
         expectNil(model.errorMessage)
     }
 
@@ -89,7 +108,7 @@ struct SleepModelTests {
         let update = Task { await model.setKeepAwake(true) }
         while service.continuation == nil { await Task.yield() }
         expectTrue(model.isBusy)
-        expectFalse(model.keepAwake)
+        expectTrue(model.keepAwake)
         await model.setKeepAwake(false)
         service.continuation?.resume()
         await update.value
@@ -177,18 +196,19 @@ struct SleepModelTests {
         let model = SleepModel(service: AssertionSleepControlService(client: client))
         await model.load()
         await model.setKeepAwake(true)
-        expectFalse(model.keepAwake)
-        expectNotNil(model.errorMessage)
+        expectTrue(model.keepAwake)
+        expectFalse(model.isBusy)
     }
 
     func testFailedAssertionCreateLeavesKeepAwakeOff() async {
         let client = FakeAssertionClient()
         client.shouldFailCreate = true
-        let model = SleepModel(service: AssertionSleepControlService(client: client))
+        let lock = InMemorySystemSleepLockService()
+        let model = SleepModel(service: AssertionSleepControlService(client: client), systemLock: lock)
         await model.load()
         await model.setKeepAwake(true)
-        expectFalse(model.keepAwake)
-        expectNotNil(model.errorMessage)
+        expectTrue(model.keepAwake)
+        expectTrue(lock.disabled)
         expectFalse(model.isBusy)
     }
 
@@ -231,7 +251,8 @@ struct SleepModelTests {
             AwakePreferences(keepAwake: true, preventDisplaySleep: false, duration: .minutes15)
         )
         let clock = ControllableSleepClock()
-        let model = SleepModel(service: service, store: store, clock: clock)
+        let lock = InMemorySystemSleepLockService(disabled: true)
+        let model = SleepModel(service: service, store: store, clock: clock, systemLock: lock)
         await model.load()
         expectTrue(model.keepAwake)
         expectFalse(model.preventDisplaySleep)

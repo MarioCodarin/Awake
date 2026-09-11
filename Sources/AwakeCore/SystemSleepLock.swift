@@ -15,13 +15,13 @@ public enum SystemSleepLock {
 @MainActor
 public protocol SystemSleepLockService: AnyObject {
     func isSleepDisabled() -> Bool
-    func clearSleepDisabled() throws
+    func setSleepDisabled(_ disabled: Bool) throws
 }
 
 @MainActor
 public final class InMemorySystemSleepLockService: SystemSleepLockService {
     public var disabled: Bool
-    public var shouldFailClear = false
+    public var shouldFailSet = false
 
     public init(disabled: Bool = false) {
         self.disabled = disabled
@@ -29,9 +29,9 @@ public final class InMemorySystemSleepLockService: SystemSleepLockService {
 
     public func isSleepDisabled() -> Bool { disabled }
 
-    public func clearSleepDisabled() throws {
-        if shouldFailClear { throw SleepControlError.releaseFailed }
-        disabled = false
+    public func setSleepDisabled(_ disabled: Bool) throws {
+        if shouldFailSet { throw SleepControlError.releaseFailed }
+        self.disabled = disabled
     }
 }
 
@@ -43,12 +43,13 @@ public final class PmsetSystemSleepLockService: SystemSleepLockService {
         SystemSleepLock.isDisabled(in: Self.pmsetG())
     }
 
-    public func clearSleepDisabled() throws {
+    public func setSleepDisabled(_ disabled: Bool) throws {
+        let flag = disabled ? "1" : "0"
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         process.arguments = [
             "-e",
-            "do shell script \"pmset -a disablesleep 0\" with administrator privileges"
+            "do shell script \"pmset -a disablesleep \(flag)\" with administrator privileges"
         ]
         try process.run()
         process.waitUntilExit()

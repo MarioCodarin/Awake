@@ -34,33 +34,31 @@ public final class SleepModel: ObservableObject {
     }
 
     public func load() async {
-        guard !hasLoaded, !isBusy else { return }
+        guard !isBusy else { return }
         isBusy = true
-        let prefs = store.load()
-        duration = prefs.duration
-        preventDisplaySleep = prefs.preventDisplaySleep
-        launchAtLogin = loginItem.isEnabled
+        if !hasLoaded {
+            let prefs = store.load()
+            duration = prefs.duration
+            preventDisplaySleep = prefs.preventDisplaySleep
+            launchAtLogin = loginItem.isEnabled
+        }
+        let disabled = systemLock.isSleepDisabled()
+        keepAwake = disabled
+        systemSleepLocked = disabled
         do {
-            var shouldStartTimer = false
-            if prefs.keepAwake {
-                try await service.set(keepAwake: true, preventDisplaySleep: preventDisplaySleep)
-                keepAwake = true
-                shouldStartTimer = true
-            } else {
-                keepAwake = try await service.read()
-            }
+            try await service.set(keepAwake: disabled, preventDisplaySleep: preventDisplaySleep)
             hasLoaded = true
             errorMessage = nil
-            refreshSystemLock()
             persist()
             isBusy = false
-            if shouldStartTimer {
+            if disabled {
                 startTimerIfNeeded()
+            } else {
+                cancelTimer()
             }
         } catch {
-            keepAwake = false
             isBusy = false
-            errorMessage = "Couldn’t read the setting. Reopen to retry."
+            errorMessage = "Couldn’t update idle sleep. Apple Sleep still follows pmset."
         }
     }
 
@@ -69,19 +67,25 @@ public final class SleepModel: ObservableObject {
         isBusy = true
         errorMessage = nil
         do {
-            try await service.set(keepAwake: value, preventDisplaySleep: preventDisplaySleep)
-            keepAwake = value
+            try systemLock.setSleepDisabled(value)
+            keepAwake = systemLock.isSleepDisabled()
+            systemSleepLocked = keepAwake
             persist()
-            refreshSystemLock()
+            try? await service.set(keepAwake: keepAwake, preventDisplaySleep: preventDisplaySleep)
             isBusy = false
-            if value {
+            if keepAwake {
                 startTimerIfNeeded()
             } else {
                 cancelTimer()
             }
+            if keepAwake != value {
+                errorMessage = "Couldn’t change Apple Sleep. Try again."
+            }
         } catch {
+            keepAwake = systemLock.isSleepDisabled()
+            systemSleepLocked = keepAwake
             isBusy = false
-            errorMessage = "Couldn’t update. Try again."
+            errorMessage = "macOS password needed to set disablesleep \(value ? "1" : "0")."
         }
     }
 
@@ -113,18 +117,7 @@ public final class SleepModel: ObservableObject {
     }
 
     public func unlockSystemSleep() {
-        do {
-            try systemLock.clearSleepDisabled()
-            refreshSystemLock()
-            if systemSleepLocked {
-                errorMessage = "Couldn’t unlock Apple Sleep. Try again."
-            } else {
-                errorMessage = nil
-            }
-        } catch {
-            refreshSystemLock()
-            errorMessage = "Password required to unlock Apple Sleep."
-        }
+        Task { await setKeepAwake(false) }
     }
 
     public func setLaunchAtLogin(_ value: Bool) {
@@ -140,10 +133,6 @@ public final class SleepModel: ObservableObject {
 
     public func waitForTimer() async {
         await timerTask?.value
-    }
-
-    private func refreshSystemLock() {
-        systemSleepLocked = systemLock.isSleepDisabled()
     }
 
     private func persist() {

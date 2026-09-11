@@ -19,7 +19,7 @@ Requires macOS 13 or later on Apple Silicon.
 
 Get the ready **macOS arm64** app from [Releases](https://github.com/MarioCodarin/Awake/releases/latest):
 
-1. Download `Awake-1.0.1-macos-arm64.zip`
+1. Download `Awake-1.0.2-macos-arm64.zip`
 2. Unzip and drag `Awake.app` into `/Applications`
 3. Open it. First launch: right-click the app → **Open** (ad-hoc signed, not notarized)
 
@@ -33,11 +33,7 @@ Intel Macs: build from source instead.
 
 Drag `dist/Awake.app` into `/Applications` and open it. A moon appears in the menu bar.
 
-If  → Sleep is gray while Awake says **Sleep allowed**, a leftover `pmset disablesleep` flag is still on. In the popover tap **Unlock Apple Sleep…** (password once), or:
-
-```sh
-sudo pmset -a disablesleep 0
-```
+**Disable sleep** is `pmset -a disablesleep 1` / `0`. macOS asks for your password when the flag changes. The switch reads the current 0/1, so  → Sleep matches the toggle.
 
 ## Usage
 

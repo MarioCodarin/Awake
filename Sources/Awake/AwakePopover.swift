@@ -14,18 +14,6 @@ struct AwakePopover: View {
             displayRow
             loginRow
             statusRow
-            if model.systemSleepLocked && !model.keepAwake {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(" Sleep is locked by an old pmset setting. Awake is off, but the Apple menu stays gray until this is cleared.")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Button("Unlock Apple Sleep…") {
-                        model.unlockSystemSleep()
-                    }
-                    .controlSize(.small)
-                }
-            }
             if let error = model.errorMessage {
                 Text(error)
                     .font(.caption)
@@ -39,6 +27,7 @@ struct AwakePopover: View {
         .background(.regularMaterial)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: model.keepAwake)
         .task { await model.load() }
+        .onAppear { Task { await model.load() } }
     }
 
     private var statusLabel: String {
@@ -48,7 +37,7 @@ struct AwakePopover: View {
     }
 
     private var appVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.1"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.2"
     }
 
     private var header: some View {
@@ -100,7 +89,7 @@ struct AwakePopover: View {
             .tint(.green)
             .controlSize(.small)
             .disabled(model.isBusy)
-            .accessibilityHint("Prevents this Mac from sleeping while Awake is on. Sleep is allowed again when you turn this off or quit.")
+            .accessibilityHint("Runs pmset disablesleep 1 or 0. macOS may ask for your password.")
         }
     }
 
@@ -179,7 +168,7 @@ struct AwakePopover: View {
             Text("Mario Codarin · v\(appVersion)")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
-            Text("Blocks idle sleep. Lid close and  → Sleep still work.")
+            Text("Toggle runs pmset disablesleep 1 / 0. Password once.")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
