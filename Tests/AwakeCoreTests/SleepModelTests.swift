@@ -22,10 +22,26 @@ struct SleepModelTests {
         await tests.testPreferencesRoundTripThroughUserDefaults()
         try await tests.testRealIOKitAssertionCreateAndRelease()
         tests.testParsesPmsetSleepDisabled()
+        tests.testSudoersLineAllowsOnlyPmsetZeroOrOne()
+        tests.testHelperInstalledUsesPrivilegedPath()
         await tests.testLoadSurfacesLeftoverPmsetLock()
         await tests.testUnlockClearsLeftoverPmsetLock()
         await tests.testToggleWritesPmsetFlag()
-        print("PASS: all 19 state-management scenarios")
+        print("PASS: all 21 state-management scenarios")
+    }
+
+    func testSudoersLineAllowsOnlyPmsetZeroOrOne() {
+        let line = SystemSleepLock.sudoersLine(user: "mariocodarin")
+        expectTrue(line.contains("NOPASSWD:"))
+        expectTrue(line.contains(SystemSleepLock.helperPath + " 0"))
+        expectTrue(line.contains(SystemSleepLock.helperPath + " 1"))
+        expectFalse(line.contains("/usr/bin/pmset"))
+    }
+
+    func testHelperInstalledUsesPrivilegedPath() {
+        expectTrue(SystemSleepLock.helperPath.hasPrefix("/Library/PrivilegedHelperTools/"))
+        expectFalse(SystemSleepLock.isHelperInstalled(fileExists: { _ in false }))
+        expectTrue(SystemSleepLock.isHelperInstalled(fileExists: { $0 == SystemSleepLock.helperPath }))
     }
 
     func testParsesPmsetSleepDisabled() {

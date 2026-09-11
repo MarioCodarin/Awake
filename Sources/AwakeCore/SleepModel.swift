@@ -85,7 +85,7 @@ public final class SleepModel: ObservableObject {
             keepAwake = systemLock.isSleepDisabled()
             systemSleepLocked = keepAwake
             isBusy = false
-            errorMessage = "macOS password needed to set disablesleep \(value ? "1" : "0")."
+            errorMessage = "Password once to install the sleep helper, then no password."
         }
     }
 

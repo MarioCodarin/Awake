@@ -37,7 +37,7 @@ struct AwakePopover: View {
     }
 
     private var appVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.2"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.3"
     }
 
     private var header: some View {
@@ -89,7 +89,7 @@ struct AwakePopover: View {
             .tint(.green)
             .controlSize(.small)
             .disabled(model.isBusy)
-            .accessibilityHint("Runs pmset disablesleep 1 or 0. macOS may ask for your password.")
+            .accessibilityHint("Sets pmset disablesleep 1 or 0. Password once to install a helper, then none.")
         }
     }
 
@@ -168,7 +168,7 @@ struct AwakePopover: View {
             Text("Mario Codarin · v\(appVersion)")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
-            Text("Toggle runs pmset disablesleep 1 / 0. Password once.")
+            Text("Password once to install helper. After that, no password.")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

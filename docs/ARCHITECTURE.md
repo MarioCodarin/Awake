@@ -15,7 +15,7 @@ The switch is `SleepDisabled` 1 or 0:
 - On → `pmset -a disablesleep 1` ( → Sleep greys out)
 - Off → `pmset -a disablesleep 0` ( → Sleep works again)
 
-macOS asks for an administrator password when that flag changes. The popover always reads the current 0/1, so the toggle cannot lie.
+The first change installs `/Library/PrivilegedHelperTools/com.mariocodarin.Awake.pmset` (password once). Later toggles call `sudo -n` on that helper with only `0` or `1`. The menu-bar app stays unprivileged.
 
 IOKit assertions are extra idle protection while the flag is on:
 
@@ -49,5 +49,5 @@ The view never talks to IOKit.
 ## Identity
 
 - Bundle ID: `com.mariocodarin.Awake`
-- Version: 1.0.2
+- Version: 1.0.3
 - Copyright: Mario Codarin
