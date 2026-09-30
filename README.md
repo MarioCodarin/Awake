@@ -11,7 +11,7 @@ sudo pmset -a disablesleep 1   # disable sleep
 sudo pmset -a disablesleep 0   # allow sleep again
 ```
 
-One toggle. No password. No Dock icon. No leftover setting if you quit.
+One toggle. Password once, then never again. No Dock icon. Quitting restores normal sleep.
 
 Requires macOS 13 or later on Apple Silicon.
 
@@ -33,37 +33,45 @@ Intel Macs: build from source instead.
 
 Drag `dist/Awake.app` into `/Applications` and open it. A moon appears in the menu bar.
 
-**Disable sleep** is `pmset -a disablesleep 1` / `0`. The first toggle asks for your password once and installs a tiny root helper that can only run those two commands. After that, the switch needs no password. The whole menu-bar app never runs as root.
+**Disable sleep** is `pmset -a disablesleep 1` / `0`. The first toggle asks for your password once and installs a tiny root helper that can only run those two commands. After that, the switch needs no password. The menu-bar app itself never runs as root.
 
 ## Usage
 
 Click the moon. Toggle **Disable sleep**.
 
-- **On** — idle sleep is blocked without sudo. The next launch restores this if you left it on.
-- **Off** — sleep is allowed again. **Quit** also allows sleep until you reopen the app.
-- **Duration** — Indefinite, 15 minutes, 30 minutes, 1 hour, or 2 hours.
+- **On** — the Mac will not sleep, and the switch shows when it will turn itself off (for example "Until 3:42 PM").
+- **Off** — sleep is allowed again.
+- **Quit** (power button or ⌘Q) turns sleep back on before the app exits, so a closed Awake never leaves the Mac unable to sleep. Quitting never asks for a password.
+- **Duration** — Indefinite, 15 minutes, 30 minutes, 1 hour, or 2 hours. The timer starts when you switch on (or change the duration); reopening the popover does not restart it.
 - **Keep display on** — also stops the display from sleeping.
-- **Launch at login** — reliable after the app lives in `/Applications`.
+- **Launch at login** — reliable once the app lives in `/Applications`.
 
 The menu-bar icon is a moon when sleep is allowed and a sun while sleep is disabled.
 
 ## How it works
 
-Awake does **not** run `pmset` or ask for a password. It holds IOKit assertions in-process:
+Two layers work together while **Disable sleep** is on:
 
-- `PreventUserIdleSystemSleep` named `Awake` — blocks idle sleep, including on battery
-- `PreventSystemSleep` named `Awake` — extra, stronger on AC (`caffeinate -s`); macOS may ignore it on battery
-- `PreventUserIdleDisplaySleep` named `Awake Display` — when **Keep display on** is checked
+1. **System flag** — `pmset -a disablesleep 1`, applied through the sudoers-scoped helper at `/Library/PrivilegedHelperTools/com.mariocodarin.Awake.pmset`. This is what greys out  → Sleep. Awake reads `pmset -g` on launch and whenever the popover opens, so it always shows the real state (including a flag left on by an earlier session or by you in Terminal).
+2. **IOKit assertions** held by the app process:
+   - `PreventUserIdleSystemSleep` named `Awake`
+   - `PreventSystemSleep` named `Awake` (stronger on AC; macOS may ignore it on battery)
+   - `PreventUserIdleDisplaySleep` named `Awake Display` when **Keep display on** is checked
 
-Confirm while it is on:
+Check it:
 
 ```sh
-pmset -g assertions
+pmset -g | grep SleepDisabled   # SleepDisabled 1 while on
+pmset -g assertions             # lists the "Awake" assertions
 ```
 
-You should see `PreventUserIdleSystemSleep named: "Awake"`. Quit the app and those lines are gone.
+Lid close can still sleep a portable in some configurations.
 
-Lid close and  → Sleep can still sleep a portable. `pmset disablesleep` is a persistent root override; Awake is the no-sudo daily switch and does not survive quitting.
+## Security model
+
+- The helper runs only `/usr/bin/pmset -a disablesleep 0|1`. The sudoers rule (`/etc/sudoers.d/awake-pmset`) allows exactly `helper 0` and `helper 1` for your user.
+- The installer script is embedded in the app and handed to `osascript` as an argument. Nothing in the app bundle or a temp file is executed as root.
+- To remove everything: `sudo rm /etc/sudoers.d/awake-pmset /Library/PrivilegedHelperTools/com.mariocodarin.Awake.pmset`.
 
 ## Privacy
 
@@ -81,7 +89,7 @@ open dist/Awake.app
 
 ## Architecture
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Five modules with one dependency rule. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## License
 
