@@ -1,6 +1,8 @@
 import Foundation
 import IOKit.pwr_mgt
+import AwakeCore
 
+/// IOKit assertion type names used by Awake.
 public enum AssertionType {
     public static let preventDisplaySleep = kIOPMAssertionTypePreventUserIdleDisplaySleep as String
     public static let preventIdleSystemSleep = kIOPMAssertionTypePreventUserIdleSystemSleep as String
@@ -8,16 +10,19 @@ public enum AssertionType {
     public static let preventSystemSleep = kIOPMAssertionTypePreventSystemSleep as String
 }
 
+/// Failures creating or releasing IOKit assertions.
 public enum SleepControlError: Error, Equatable {
     case assertionFailed(Int32)
     case releaseFailed
 }
 
+/// Thin seam over IOKit so assertion bookkeeping can be tested with a fake.
 public protocol AssertionClient: AnyObject {
     func create(type: String, name: String) throws -> UInt32
     func release(id: UInt32) throws
 }
 
+/// Real `AssertionClient` using `IOPMAssertionCreateWithName`.
 public final class IOKitAssertionClient: AssertionClient {
     public init() {}
 
@@ -43,6 +48,8 @@ public final class IOKitAssertionClient: AssertionClient {
     }
 }
 
+/// Holds `PreventUserIdleSystemSleep` (plus `PreventSystemSleep`, and the display assertion when
+/// requested) while sleep is disabled. Process exit drops them.
 @MainActor
 public final class AssertionSleepControlService: SleepControlService {
     private let client: any AssertionClient

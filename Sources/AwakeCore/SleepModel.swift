@@ -1,6 +1,13 @@
 import Combine
 import Foundation
 
+/// Single source of truth for the popover. Owns the sleep state, the duration timer and preferences,
+/// and talks to the system only through injected services.
+///
+/// State rules:
+/// - `keepAwake` always mirrors the confirmed `pmset` flag; a failed write leaves it unchanged.
+/// - Writes are ignored while `isBusy`.
+/// - A duration timer is armed only when sleep turns off→on or the duration changes, never by `load()`.
 @MainActor
 public final class SleepModel: ObservableObject {
     @Published public private(set) var keepAwake = false
@@ -9,84 +16,71 @@ public final class SleepModel: ObservableObject {
     @Published public private(set) var preventDisplaySleep = true
     @Published public private(set) var duration: AwakeDuration = .indefinite
     @Published public private(set) var launchAtLogin = false
-    @Published public private(set) var systemSleepLocked = false
+    @Published public private(set) var helperInstalled = false
+    /// When the running timer will turn sleep prevention off; `nil` if no timer is running.
+    @Published public private(set) var endDate: Date?
 
     private var hasLoaded = false
+    private var expiryPending = false
+    private var timerTask: Task<Void, Never>?
     private let service: any SleepControlService
     private let store: any PreferencesStore
     private let clock: any SleepClock
     private let loginItem: any LoginItemService
     private let systemLock: any SystemSleepLockService
-    private var timerTask: Task<Void, Never>?
+    private let now: () -> Date
 
     public init(
         service: any SleepControlService,
-        store: (any PreferencesStore)? = nil,
-        clock: (any SleepClock)? = nil,
-        loginItem: (any LoginItemService)? = nil,
-        systemLock: (any SystemSleepLockService)? = nil
+        store: any PreferencesStore,
+        clock: any SleepClock,
+        loginItem: any LoginItemService,
+        systemLock: any SystemSleepLockService,
+        now: @escaping () -> Date = Date.init
     ) {
         self.service = service
-        self.store = store ?? InMemoryPreferencesStore()
-        self.clock = clock ?? RealSleepClock()
-        self.loginItem = loginItem ?? InMemoryLoginItemService()
-        self.systemLock = systemLock ?? InMemorySystemSleepLockService()
+        self.store = store
+        self.clock = clock
+        self.loginItem = loginItem
+        self.systemLock = systemLock
+        self.now = now
     }
 
+    // MARK: - Loading
+
+    /// Syncs the model with the system. Safe to call whenever the popover opens; it does not
+    /// restart a running timer.
     public func load() async {
         guard !isBusy else { return }
-        isBusy = true
+        beginBusy()
         if !hasLoaded {
             let prefs = store.load()
             duration = prefs.duration
             preventDisplaySleep = prefs.preventDisplaySleep
-            launchAtLogin = loginItem.isEnabled
-        }
-        let disabled = systemLock.isSleepDisabled()
-        keepAwake = disabled
-        systemSleepLocked = disabled
-        do {
-            try await service.set(keepAwake: disabled, preventDisplaySleep: preventDisplaySleep)
             hasLoaded = true
+        }
+        launchAtLogin = loginItem.isEnabled
+        let disabled = await systemLock.isSleepDisabled()
+        helperInstalled = systemLock.isHelperInstalled
+        keepAwake = disabled
+        do {
+            if (try? await service.read()) != disabled {
+                try await service.set(keepAwake: disabled, preventDisplaySleep: preventDisplaySleep)
+            }
             errorMessage = nil
             persist()
-            isBusy = false
-            if disabled {
-                startTimerIfNeeded()
-            } else {
-                cancelTimer()
-            }
+            endBusy()
+            syncTimer(restart: false)
         } catch {
-            isBusy = false
+            endBusy()
             errorMessage = "Couldn’t update idle sleep. Apple Sleep still follows pmset."
         }
     }
 
+    // MARK: - Intents
+
     public func setKeepAwake(_ value: Bool) async {
-        guard !isBusy else { return }
-        isBusy = true
-        errorMessage = nil
-        do {
-            try systemLock.setSleepDisabled(value)
-            keepAwake = systemLock.isSleepDisabled()
-            systemSleepLocked = keepAwake
-            persist()
-            try? await service.set(keepAwake: keepAwake, preventDisplaySleep: preventDisplaySleep)
-            isBusy = false
-            if keepAwake {
-                startTimerIfNeeded()
-            } else {
-                cancelTimer()
-            }
-            if keepAwake != value {
-                errorMessage = "Couldn’t change Apple Sleep. Try again."
-            }
-        } catch {
-            keepAwake = systemLock.isSleepDisabled()
-            systemSleepLocked = keepAwake
-            isBusy = false
-            errorMessage = "Password once to install the sleep helper, then no password."
-        }
+        await applyKeepAwake(value, allowHelperInstall: true)
     }
 
     public func setPreventDisplaySleep(_ value: Bool) async {
@@ -96,15 +90,15 @@ public final class SleepModel: ObservableObject {
             persist()
             return
         }
-        isBusy = true
+        beginBusy()
         errorMessage = nil
         do {
             try await service.set(keepAwake: true, preventDisplaySleep: value)
             persist()
-            isBusy = false
+            endBusy()
         } catch {
             preventDisplaySleep = previous
-            isBusy = false
+            endBusy()
             errorMessage = "Couldn’t update. Try again."
         }
     }
@@ -113,11 +107,7 @@ public final class SleepModel: ObservableObject {
         duration = value
         persist()
         guard keepAwake else { return }
-        startTimerIfNeeded()
-    }
-
-    public func unlockSystemSleep() {
-        Task { await setKeepAwake(false) }
+        syncTimer(restart: true)
     }
 
     public func setLaunchAtLogin(_ value: Bool) {
@@ -131,9 +121,80 @@ public final class SleepModel: ObservableObject {
         }
     }
 
+    public func dismissError() {
+        errorMessage = nil
+    }
+
+    /// Restores normal sleep before the app quits. Never prompts for a password: if the helper
+    /// is not installed, the flag was never changed by this app.
+    public func shutdown() async {
+        cancelTimer()
+        if keepAwake {
+            try? await systemLock.setSleepDisabled(false, allowHelperInstall: false)
+            keepAwake = await systemLock.isSleepDisabled()
+        }
+        try? await service.set(keepAwake: false, preventDisplaySleep: preventDisplaySleep)
+        persist()
+    }
+
+    /// Suspends until the running timer finishes. For tests.
     public func waitForTimer() async {
         await timerTask?.value
     }
+
+    // MARK: - Sleep flag
+
+    private func applyKeepAwake(_ value: Bool, allowHelperInstall: Bool) async {
+        guard !isBusy else { return }
+        beginBusy()
+        errorMessage = nil
+        let wasOn = keepAwake
+        do {
+            try await systemLock.setSleepDisabled(value, allowHelperInstall: allowHelperInstall)
+            keepAwake = await systemLock.isSleepDisabled()
+            helperInstalled = systemLock.isHelperInstalled
+            persist()
+            try? await service.set(keepAwake: keepAwake, preventDisplaySleep: preventDisplaySleep)
+            endBusy()
+            syncTimer(restart: keepAwake && !wasOn)
+            if keepAwake != value {
+                errorMessage = "Couldn’t change Apple Sleep. Try again."
+            }
+        } catch {
+            keepAwake = await systemLock.isSleepDisabled()
+            helperInstalled = systemLock.isHelperInstalled
+            endBusy()
+            errorMessage = Self.message(for: error)
+        }
+    }
+
+    private static func message(for error: Error) -> String {
+        switch error as? SystemSleepLockError {
+        case .installCancelled:
+            return "Password cancelled. Sleep setting unchanged."
+        case .helperMissing:
+            return "Sleep helper is not installed. Toggle Disable sleep to install it."
+        default:
+            return "Couldn’t change Apple Sleep. Try again."
+        }
+    }
+
+    // MARK: - Busy tracking
+
+    private func beginBusy() {
+        isBusy = true
+    }
+
+    /// Clears `isBusy` and applies a timer expiry that arrived while a write was in flight.
+    private func endBusy() {
+        isBusy = false
+        if expiryPending {
+            expiryPending = false
+            Task { await expireTimer() }
+        }
+    }
+
+    // MARK: - Timer
 
     private func persist() {
         store.save(
@@ -145,14 +206,21 @@ public final class SleepModel: ObservableObject {
         )
     }
 
-    private func cancelTimer() {
-        timerTask?.cancel()
-        timerTask = nil
+    /// Makes the timer match the state: off when sleep is allowed or the duration is indefinite,
+    /// otherwise armed. A running timer is kept unless `restart` is true.
+    private func syncTimer(restart: Bool) {
+        guard keepAwake, let seconds = duration.seconds else {
+            cancelTimer()
+            return
+        }
+        if restart || timerTask == nil {
+            armTimer(seconds: seconds)
+        }
     }
 
-    private func startTimerIfNeeded() {
+    private func armTimer(seconds: TimeInterval) {
         cancelTimer()
-        guard let seconds = duration.seconds else { return }
+        endDate = now().addingTimeInterval(seconds)
         let clock = self.clock
         timerTask = Task { [weak self] in
             do {
@@ -165,8 +233,21 @@ public final class SleepModel: ObservableObject {
         }
     }
 
+    private func cancelTimer() {
+        timerTask?.cancel()
+        timerTask = nil
+        endDate = nil
+        expiryPending = false
+    }
+
     private func expireTimer() async {
         timerTask = nil
-        await setKeepAwake(false)
+        endDate = nil
+        guard keepAwake else { return }
+        if isBusy {
+            expiryPending = true
+            return
+        }
+        await applyKeepAwake(false, allowHelperInstall: false)
     }
 }
