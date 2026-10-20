@@ -1,7 +1,7 @@
 # Awake
 
 <p align="center">
-  <img src="docs/icon.png" width="128" height="128" alt="Awake app icon: a golden sun overlapping a silver moon on a night sky">
+  <img src="docs/icon.png" width="128" height="128" alt="Awake app icon: an amber sun on a deep blue squircle">
 </p>
 
 A native macOS menu-bar app by **Mario Codarin**. Daily stand-in for:

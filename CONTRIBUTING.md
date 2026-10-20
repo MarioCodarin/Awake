@@ -20,7 +20,8 @@ swift run AwakeChecks          # test suite, must stay green
 | `Sources/AwakeUI` | `AwakeUI` | `AwakePopover`, `Components/*`, `Theme`. |
 | `Sources/Awake` | `Awake` | `@main` app, composition root (`AppContainer`), quit handling. |
 | `Tests/AwakeCoreTests` | `AwakeChecks` | Executable check suite (not XCTest). |
-| `Resources` | | `Info.plist`, app icon. |
+| `Resources` | | `Info.plist`, generated app icon. |
+| `icon` | | `AppIcon.svg`, the icon source. Run `scripts/make-icon.sh` (needs `brew install librsvg`) to regenerate `Resources/AppIcon.*`. |
 
 **Dependency rule:** `AwakeCore` imports no system frameworks. `AwakeUI` depends only on `AwakeCore`, never on `AwakePlatform`. Only `AwakePlatform` links IOKit and ServiceManagement. Only `Awake` wires real services together.
 
