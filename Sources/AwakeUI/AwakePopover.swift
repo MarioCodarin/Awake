@@ -12,19 +12,20 @@ public struct AwakePopover: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
-            HeaderView()
             KeepAwakeRow(model: model)
             DurationRow(model: model)
             OptionsSection(model: model)
             if let error = model.errorMessage {
                 ErrorBanner(message: error, dismiss: model.dismissError)
+                    .transition(reduceMotion ? .identity : .opacity)
             }
             FooterView(helperInstalled: model.helperInstalled)
         }
         .padding(Theme.popoverPadding)
         .frame(width: Theme.popoverWidth)
-        .background(.regularMaterial)
         .animation(reduceMotion ? nil : Theme.animation, value: model.keepAwake)
+        .animation(reduceMotion ? nil : Theme.animation, value: model.errorMessage)
+        .animation(reduceMotion ? nil : Theme.animation, value: model.endDate)
         .onAppear { Task { await model.load() } }
     }
 }

@@ -12,24 +12,25 @@ struct KeepAwakeRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Theme.space12) {
             Image(systemName: model.keepAwake ? "sun.max.fill" : "moon.fill")
-                .font(.system(size: 19, weight: .medium))
-                .foregroundStyle(model.keepAwake ? Theme.active : Color.secondary)
-                .frame(width: Theme.iconTileSize, height: Theme.iconTileSize)
+                .font(Theme.glyph)
+                .foregroundStyle(model.keepAwake ? Theme.accent : Color.secondary)
+                .frame(width: Theme.glyphSize, height: Theme.glyphSize)
                 .background(
-                    model.keepAwake ? Theme.active.opacity(0.12) : Color.primary.opacity(0.05),
-                    in: RoundedRectangle(cornerRadius: Theme.iconTileRadius)
+                    model.keepAwake ? Theme.accent.opacity(0.18) : Color.primary.opacity(0.06),
+                    in: RoundedRectangle(cornerRadius: Theme.radiusGlyph, style: .continuous)
                 )
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text("Disable sleep")
-                    .font(Theme.rowTitle)
+                    .font(Theme.title)
                 Text(subtitle)
-                    .font(Theme.secondary)
+                    .font(Theme.caption)
                     .foregroundStyle(.secondary)
+                    .contentTransition(.opacity)
             }
-            Spacer(minLength: 4)
+            Spacer(minLength: Theme.space4)
             if model.isBusy {
                 ProgressView().controlSize(.small).accessibilityLabel("Updating")
             }
@@ -39,11 +40,16 @@ struct KeepAwakeRow: View {
             ))
             .labelsHidden()
             .toggleStyle(.switch)
-            .tint(Theme.active)
+            .tint(Theme.accent)
             .controlSize(.small)
             .disabled(model.isBusy)
             .accessibilityValue(subtitle)
             .accessibilityHint("Stops the Mac from sleeping until you turn it off or the timer ends.")
         }
+        .padding(Theme.cardPadding)
+        .background(
+            model.keepAwake ? Theme.cardFillActive : Theme.cardFill,
+            in: RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous)
+        )
     }
 }
